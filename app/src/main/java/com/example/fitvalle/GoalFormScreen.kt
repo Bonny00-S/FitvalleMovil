@@ -101,22 +101,55 @@ fun GoalFormScreen(navController: NavController, viewModel: UserFormViewModel) {
                 )
                 Spacer(Modifier.height(8.dp))
 
-                val activityLevels =
-                    listOf("Sedentario", "Ligeramente activo", "Moderadamente activo", "Muy activo")
-                activityLevels.forEach { level ->
-                    Button(
-                        onClick = { viewModel.activityLevel.value = level },
-                        colors = ButtonDefaults.buttonColors(
-                            if (viewModel.activityLevel.value == level) Color.LightGray else Color.Gray
-                        ),
+                val activityLevels = listOf(
+                    "Sedentario",
+                    "Ligeramente activo",
+                    "Moderadamente activo",
+                    "Muy activo"
+                )
+
+                var expandedActivity by remember { mutableStateOf(false) }
+                var expandedSpeed by remember { mutableStateOf(false) }
+                val selectedLevel = viewModel.activityLevel.value
+
+                ExposedDropdownMenuBox(
+                    expanded = expandedActivity,
+                    onExpandedChange = { expandedActivity = !expandedActivity },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = selectedLevel.ifEmpty { "Selecciona tu nivel" },
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Nivel de actividad") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFD5CDCD),
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = Color(0xFFB2BBBA)
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expandedActivity,
+                        onDismissRequest = { expandedActivity = false }
                     ) {
-                        Text(level, color = Color.White)
+                        activityLevels.forEach { level ->
+                            DropdownMenuItem(
+                                text = { Text(level) },
+                                onClick = {
+                                    viewModel.activityLevel.value = level
+                                    expandedActivity = false
+                                }
+                            )
+                        }
                     }
                 }
-
                 Spacer(Modifier.height(20.dp))
 
                 // Velocidad (según objetivo)
@@ -128,8 +161,8 @@ fun GoalFormScreen(navController: NavController, viewModel: UserFormViewModel) {
                 Spacer(Modifier.height(8.dp))
 
                 ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = !expanded }
+                    expanded = expandedSpeed,
+                    onExpandedChange = { expandedSpeed = !expandedSpeed }
                 ) {
                     OutlinedTextField(
                         value = viewModel.gainSpeed.value,
@@ -142,15 +175,15 @@ fun GoalFormScreen(navController: NavController, viewModel: UserFormViewModel) {
                             .fillMaxWidth()
                     )
                     ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        expanded = expandedSpeed,
+                        onDismissRequest = { expandedSpeed = false }
                     ) {
                         gainOptions.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
                                 onClick = {
                                     viewModel.gainSpeed.value = option
-                                    expanded = false
+                                    expandedSpeed = false
                                 }
                             )
                         }

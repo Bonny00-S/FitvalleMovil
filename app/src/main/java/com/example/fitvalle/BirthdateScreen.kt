@@ -31,6 +31,9 @@ fun BirthdateScreen(navController: NavController, viewModel: UserFormViewModel) 
     // Estado para mostrar/ocultar el DatePickerDialog
     var showDatePicker by remember { mutableStateOf(false) }
 
+    // Estado para mostrar la edad
+    var ageDisplay by remember { mutableStateOf("") }
+
     // DatePicker con validación de fecha máxima (hoy)
     val datePickerDialog = DatePickerDialog(
         context,
@@ -62,6 +65,9 @@ fun BirthdateScreen(navController: NavController, viewModel: UserFormViewModel) 
             // Guardar fecha válida
             val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
             viewModel.birthdate.value = formatter.format(selectedDate.time)
+
+            // Mostrar la edad automáticamente
+            ageDisplay = "$age años"
         },
         calendar.get(Calendar.YEAR),
         calendar.get(Calendar.MONTH),
@@ -127,6 +133,17 @@ fun BirthdateScreen(navController: NavController, viewModel: UserFormViewModel) 
                         }
                     }
                 )
+
+                // Mostrar la edad si está disponible
+                if (ageDisplay.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "Tienes $ageDisplay",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                }
 
                 Spacer(Modifier.height(30.dp))
 

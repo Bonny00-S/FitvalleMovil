@@ -194,7 +194,7 @@ fun TrainingPreferencesScreen(navController: NavController, viewModel: UserFormV
                             val requestDao = RequestDao()
                             requestDao.saveRequest(request) { success, msg ->
                                 if (success) {
-                                    navController.navigate("mainClient")
+                                    navController.navigate("mainClientNav")
                                 } else {
                                     scope.launch { snackbarHostState.showSnackbar(msg) }
                                 }

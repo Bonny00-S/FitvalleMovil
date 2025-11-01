@@ -1,0 +1,116 @@
+package com.example.fitvalle
+
+import com.google.firebase.database.FirebaseDatabase
+import kotlinx.coroutines.tasks.await
+import android.util.Log
+
+class SessionDao {
+
+    private val dbRoot = FirebaseDatabase.getInstance("https://fitvalle-fced7-default-rtdb.firebaseio.com/").reference
+    private val sessionExercisesRef = dbRoot.child("sessionExercises")
+    private val exercisesRef = dbRoot.child("exercise")
+
+    // Devuelve la lista de SessionExercise con exerciseName cargado cuando sea posible
+    suspend fun getSessionExercises(sessionId: String): List<SessionExercise> {
+        return try {
+            val list = mutableListOf<SessionExercise>()
+            val nodeSnap = sessionExercisesRef.child(sessionId).get().await()
+            if (nodeSnap.exists()) {
+                for (exChild in nodeSnap.children) {
+                    val exObj = exChild.getValue(SessionExercise::class.java)
+                    val exercise = exObj ?: SessionExercise(
+                        exerciseId = exChild.child("exerciseId").getValue(String::class.java),
+                        sessionId = sessionId,
+                        reps = exChild.child("reps").getValue(Int::class.java),
+                        sets = exChild.child("sets").getValue(Int::class.java)
+                    )
+                    exercise.exerciseName = getExerciseName(exercise.exerciseId)
+                    list.add(exercise)
+                }
+            }
+            list
+        } catch (e: Exception) {
+            Log.e("SessionDao", "Error getSessionExercises: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+
+    private suspend fun getExerciseName(exerciseId: String?): String? {
+        if (exerciseId.isNullOrEmpty()) return null
+        return try {
+            val snap = exercisesRef.child(exerciseId).get().await()
+            snap.child("name").getValue(String::class.java)
+        } catch (e: Exception) {
+            Log.w("SessionDao", "No pude leer exercise name para $exerciseId: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun saveSessionExercise(exercise: SessionExercise) {
+        try {
+            val key = sessionExercisesRef.push().key ?: return
+            sessionExercisesRef.child(key).setValue(exercise).await()
+        } catch (e: Exception) {
+            Log.e("SessionDao", "Error saveSessionExercise: ${e.message}", e)
+        }
+    }
+    suspend fun saveCompletedSession(
+        customerId: String,
+        routineId: String,
+        sessionId: String,
+        exercisesDone: List<SessionExercise>
+    ): Boolean {
+        return try {
+            val completedSessionRef = dbRoot.child("completedSessions").push()
+            val completedData = mapOf(
+                "id" to completedSessionRef.key,
+                "customerId" to customerId,
+                "routineId" to routineId,
+                "sessionId" to sessionId,
+                "dateFinished" to java.time.Instant.now().toString(),
+                "exercisesDone" to exercisesDone.map {
+                    mapOf(
+                        "exerciseId" to it.exerciseId,
+                        "exerciseName" to it.exerciseName,
+                        "sets" to it.sets,
+                        "reps" to it.reps
+                    )
+                }
+            )
+            completedSessionRef.setValue(completedData).await()
+            true
+        } catch (e: Exception) {
+            Log.e("SessionDao", "Error guardando sesión completada: ${e.message}", e)
+            false
+        }
+    }
+    suspend fun updateLastSessionTrained(customerId: String, sessionId: String) {
+        try {
+            dbRoot.child("userProgress")
+                .child(customerId)
+                .child("lastSessionTrained")
+                .setValue(sessionId)
+                .await()
+            Log.d("SessionDao", "Progreso actualizado a sesión $sessionId")
+        } catch (e: Exception) {
+            Log.e("SessionDao", "Error actualizando progreso: ${e.message}", e)
+        }
+    }
+
+    suspend fun getLastSessionTrained(customerId: String): String? {
+        return try {
+            val snap = dbRoot.child("userProgress")
+                .child(customerId)
+                .child("lastSessionTrained")
+                .get()
+                .await()
+            snap.getValue(String::class.java)
+        } catch (e: Exception) {
+            Log.e("SessionDao", "Error obteniendo progreso: ${e.message}", e)
+            null
+        }
+    }
+
+}
+

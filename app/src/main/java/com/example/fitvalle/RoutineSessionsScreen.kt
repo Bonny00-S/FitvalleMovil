@@ -4,10 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,9 +15,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.fitvalle.data.dao.RoutineDao
-import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,43 +25,39 @@ fun RoutineSessionsScreen(
     routineId: String,
     navController: NavController
 ) {
-    val gradient = Brush.verticalGradient(
-        listOf(Color(0xFF8E0E00), Color(0xFF1F1C18))
-    )
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF0D1525), Color(0xFF182235)))
+    val primary = Color(0xFFB1163A)
 
-    val scope = rememberCoroutineScope()
     var sessions by remember { mutableStateOf<List<Session>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    var lastSessionTrained by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        val dao = SessionDao()
-        val customerId = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
+    LaunchedEffect(routineId) {
+        loading = true
+        val dao = RoutineDao()
+        try {
+            // 🧠 Obtiene las rutinas asignadas y busca la correspondiente
+            val routines = dao.getAssignedRoutines()
+            val routine = routines.find { it.id == routineId }
 
-        // 🔹 Cargar sesiones de la rutina
-        val routineDao = RoutineDao()
-        sessions = routineDao.getSessionsByRoutine(routineId)
-
-        // 🔹 Obtener última sesión completada
-        lastSessionTrained = dao.getLastSessionTrained(customerId)
-
-        loading = false
+            if (routine != null) {
+                sessions = routine.sessions.values.toList()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            loading = false
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "Sesiones de rutina",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Sesiones de la rutina", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver",
                             tint = Color.White
                         )
@@ -75,64 +69,89 @@ fun RoutineSessionsScreen(
         containerColor = Color.Transparent
     ) { paddingValues ->
         Box(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .background(gradient)
                 .padding(paddingValues)
-                .padding(16.dp)
         ) {
             when {
                 loading -> CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.White
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.Center)
                 )
 
-                sessions.isEmpty() -> Text("No hay sesiones disponibles", color = Color.White)
+                sessions.isEmpty() -> Text(
+                    "No hay sesiones disponibles para esta rutina.",
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.Center)
+                )
 
-                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // 👇 usamos itemsIndexed para numerarlas
-                    itemsIndexed(sessions) { index, session ->
-                        val completed = session.id == lastSessionTrained
-                        SessionCard(
-                            session = session,
-                            completed = completed,
-                            sessionNumber = index + 1
+                else -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(sessions) { session ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    navController.navigate("activeSession/${session.id}/$routineId")
+                                }
                         ) {
-                            navController.navigate("activeSession/${session.id}/$routineId")
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "Sesión ${session.id.take(6)}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                                Text(
+                                    text = "Registrada: ${session.registerDate}",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 13.sp
+                                )
+
+                                val exerciseCount = session.sessionExercises?.size ?: 0
+                                Text(
+                                    text = "Ejercicios: $exerciseCount",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 13.sp
+                                )
+
+                                if (exerciseCount > 0) {
+                                    Spacer(Modifier.height(6.dp))
+                                    session.sessionExercises!!.values.take(3).forEach {
+                                        Text("• ${it.exerciseName ?: "Ejercicio"}",
+                                            color = Color(0xFFAAB2C5),
+                                            fontSize = 12.sp)
+                                    }
+                                    if (exerciseCount > 3) {
+                                        Text("+${exerciseCount - 3} más...",
+                                            color = Color(0xFFAAB2C5),
+                                            fontSize = 12.sp)
+                                    }
+                                }
+
+                                Spacer(Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        navController.navigate("activeSession/${session.id}/$routineId")
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = primary),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Iniciar sesión", color = Color.White)
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun SessionCard(
-    session: Session,
-    completed: Boolean,
-    sessionNumber: Int,
-    onClick: () -> Unit
-) {
-    val color = if (completed) Color(0xFF4CAF50) else Color(0xFFB71C1C)
-    val textStatus = if (completed) "Completada" else "Pendiente"
-
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            // 🔹 Mostramos "Sesión 1", "Sesión 2", etc.
-            Text(
-                text = "Sesión $sessionNumber",
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(8.dp))
-            Text("Estado: $textStatus", color = color, fontWeight = FontWeight.Medium)
         }
     }
 }

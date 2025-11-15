@@ -1,13 +1,13 @@
-package com.example.fitvalle.ui.screens
+package com.example.fitvalle
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -15,48 +15,88 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(onBack: () -> Unit) {
-    val gradient = Brush.verticalGradient(
-        listOf(Color(0xFF8E0E00), Color(0xFF1F1C18))
-    )
+fun HistoryScreen(navController: NavController) {
+    val fondoPrincipal = Brush.verticalGradient(listOf(Color(0xFF8E0E00), Color(0xFF1F1C18)))
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(gradient)
-    ) {
-        Column(
+    // 🔹 Ejemplo temporal de historial (puedes reemplazar con tus datos reales)
+    val historyList = remember {
+        mutableStateListOf(
+            "Rutina de Piernas - 3 ejercicios completados",
+            "Full Body - 5 ejercicios completados",
+            "Rutina de Espalda - 4 ejercicios completados"
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Historial de Entrenamientos",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .background(fondoPrincipal)
+                .padding(innerPadding)
+                .padding(16.dp)
         ) {
-
-
-            // 🏋️‍♀️ Título
-            Text(
-                text = "Historial de Ejercicios",
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 16.dp)
-            )
-
-            // 📜 Contenido vacío (placeholder)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 100.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            if (historyList.isEmpty()) {
                 Text(
-                    text = "Aún no hay historial registrado.",
+                    "Aún no tienes entrenamientos registrados.",
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 18.sp
+                    fontSize = 16.sp,
+                    modifier = Modifier.align(Alignment.Center)
                 )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(historyList) { item ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    text = item,
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

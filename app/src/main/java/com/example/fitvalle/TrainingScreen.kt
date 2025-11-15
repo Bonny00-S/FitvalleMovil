@@ -1,10 +1,12 @@
-package com.example.fitvalle.ui.screens
+package com.example.fitvalle
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,148 +18,286 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.fitvalle.Routine
-import com.example.fitvalle.data.dao.RoutineDao
-//import com.example.fitvalle.data.model.Routine
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
-
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrainingScreen(navController: NavController) {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF8E0E00), Color(0xFF1F1C18)))
-    val coroutineScope = rememberCoroutineScope()
-    var routines by remember { mutableStateOf<List<Routine>>(emptyList()) }
+    val fondoPrincipal = Brush.verticalGradient(listOf(Color(0xFF8E0E00), Color(0xFF1F1C18)))
+    val primario = Color(0xFFB1163A)
+
+    val scope = rememberCoroutineScope()
+
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabs = listOf("Mis plantillas", "Asignadas por mi coach")
+
+    var myTemplates by remember { mutableStateOf<List<Template>>(emptyList()) }
+    var assignedRoutines by remember { mutableStateOf<List<Routine>>(emptyList()) }
+
     var loading by remember { mutableStateOf(true) }
-    val myTemplates = listOf("Piernas" to "Ab Wheel")
-    val exampleTemplates = listOf(
-        "Strong 5x5 - Workout B" to "Squat (Barbell), Press, Deadlift",
-        "Legs" to "Squat (Barbell), Leg Extension, Leg Raise"
-    )
+
+    // 🔥 Cargar datos desde los DAOs
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            val dao = RoutineDao()
-            routines = dao.getAssignedRoutines()
-            loading = false
+        loading = true
+        val templateDao = TemplateDao()
+        val routineDao = RoutineDao()
+
+        scope.launch {
+            myTemplates = templateDao.getUserTemplates()
         }
+        scope.launch {
+            assignedRoutines = routineDao.getAssignedRoutines()
+        }
+        loading = false
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(gradient)
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-    ) {
-        Column(
+    Scaffold(
+        floatingActionButton = {
+            // solo tiene sentido crear plantillas propias
+            if (selectedTab == 0) {
+                FloatingActionButton(
+                    onClick = { navController.navigate("crearPlantilla") },
+                    containerColor = primario
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Agregar Plantilla",
+                        tint = Color.White
+                    )
+                }
+            }
+        },
+        containerColor = Color.Transparent,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Mis Plantillas",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        }
+    ) { innerPadding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 70.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .background(fondoPrincipal)
+                .padding(innerPadding)
         ) {
-            Text(
-                text = "Entrenamiento",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(top = 10.dp, bottom = 24.dp)
-            )
+            Column(Modifier.fillMaxSize()) {
 
-            // when {
-            //   loading -> CircularProgressIndicator(color = Color.White)
-
-            // routines.isEmpty() -> Text(
-            //   text = "No tienes rutinas asignadas.",
-            // color = Color(0xFFFFCDD2),
-            //fontSize = 14.sp
-            //)
-
-            //else -> LazyColumn(
-            //  modifier = Modifier.fillMaxSize(),
-            //verticalArrangement = Arrangement.spacedBy(20.dp)
-            //) {
-            //  items(routines) { routine ->
-            //    TemplateCard(
-            //      title = "Rutina ${routine.id.take(6)}",
-            //    description = "Entrenador: ${routine.coachId.take(6)} • ${routine.sessions?.size ?: 0} sesiones"
-            // ) {
-            //   navController.navigate("workoutDetail/${routine.id}")
-            //}
-            //}
-            //}
-            //}
-            when {
-                loading -> CircularProgressIndicator(color = Color.White)
-
-                routines.isEmpty() -> Text(
-                    text = "No tienes rutinas asignadas.",
-                    color = Color(0xFFFFCDD2),
-                    fontSize = 14.sp
-                )
-
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                // 🔹 Tabs
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color(0xFF182235)
                 ) {
-                    item {
-                        SectionTitle("Mis Plantillas")
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = { Text(title, color = Color.White) }
+                        )
                     }
-                    items(myTemplates) { (title, desc) ->
-                        TemplateCard(title, desc) {
-                            navController.navigate("workoutDetail/$title")
-                        }
-                    }
+                }
 
-                    item {
-                        SectionTitle("Rutinas Asignadas")
-                    }
-                    items(routines) { routine ->
-                        TemplateCard(
-                            title = "Rutina",
-                            description = "Entrenador: ${routine.coachName ?: "Desconocido"} • ${routine.sessions?.size ?: 0} sesiones"
+                when {
+                    loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            navController.navigate("workoutDetail/${routine.id}/${routine.coachName}")
+                            CircularProgressIndicator(color = Color.White)
                         }
                     }
 
+                    selectedTab == 0 -> {
+                        // ==========================
+                        //   MIS PLANTILLAS
+                        // ==========================
+                        if (myTemplates.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No tienes plantillas creadas aún.", color = Color.White)
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp)
+                            ) {
+                                items(myTemplates) { template ->
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = Color(
+                                                0xFF2E1A1A
+                                            )
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(80.dp)
+                                            .clickable {
+                                                navController.navigate("templateDetail/${template.id}")
+                                            }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 16.dp),
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                template.name,
+                                                color = Color.White,
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                "${template.exercises.size} ejercicios",
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        // ==========================
+                        //   ASIGNADAS POR MI COACH
+                        // ==========================
+                        val fondoCard = Color(0xFF2E1A1A)
+                        val textoSecundario = Color(0xFFAAB2C5)
+                        val primario = Color(0xFFB1163A)
+                        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
+
+                        var sessions by remember {
+                            mutableStateOf<List<Pair<String, Session>>>(
+                                emptyList()
+                            )
+                        }
+                        var loadingSessions by remember { mutableStateOf(true) }
+
+                        // 🔹 Cargar sesiones desde las rutinas asignadas al usuario actual
+                        LaunchedEffect(assignedRoutines) {
+                            loadingSessions = true
+                            val list = mutableListOf<Pair<String, Session>>()
+
+                            assignedRoutines
+                                .filter { it.customerId == currentUserId }
+                                .forEach { routine ->
+                                    routine.sessions.forEach { (sessionId, session) ->
+                                        list.add(sessionId to session.copy(routineId = routine.id))
+                                    }
+                                }
+
+                            sessions = list
+                            loadingSessions = false
+                        }
+
+                        when {
+                            loadingSessions -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(color = Color.White)
+                                }
+                            }
+
+                            sessions.isEmpty() -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Tu entrenador todavía no te asignó sesiones.",
+                                        color = Color.White
+                                    )
+                                }
+                            }
+
+                            else -> {
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp)
+                                ) {
+                                    items(sessions) { (sessionId, session) ->
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = fondoCard),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    // Ir directamente a la sesión activa
+                                                    navController.navigate("activeSession/${sessionId}/${session.routineId}")
+                                                }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Sesión ${sessionId.take(6)}",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 18.sp
+                                                )
+                                                if (session.registerDate.isNotEmpty()) {
+                                                    Text(
+                                                        "Registrada: ${session.registerDate}",
+                                                        color = textoSecundario,
+                                                        fontSize = 13.sp
+                                                    )
+                                                }
+
+                                                Text(
+                                                    "Ejercicios: ${session.sessionExercises?.size ?: 0}",
+                                                    color = textoSecundario,
+                                                    fontSize = 13.sp
+                                                )
+
+                                                Spacer(Modifier.height(8.dp))
+
+                                                Button(
+                                                    onClick = {
+                                                        navController.navigate("activeSession/${sessionId}/${session.routineId}")
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = primario
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text("Iniciar sesión", color = Color.White)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-
-        FloatingActionButton(
-            onClick = { navController.navigate("crearPlantilla") },
-            containerColor = Color(0xFFD50000),
-            contentColor = Color.White,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Añadir plantilla")
-        }
     }
 }
-@Composable fun SectionTitle(title: String) { Text( text = title, color = Color(0xFFFFCDD2), fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp) ) }
-@Composable
-fun TemplateCard(title: String, description: String, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 18.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = description,
-                color = Color(0xFFFFCDD2),
-                fontSize = 14.sp
-            )
-        }
-    }
-}
-

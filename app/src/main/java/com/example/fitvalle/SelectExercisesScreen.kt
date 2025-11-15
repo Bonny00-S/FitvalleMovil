@@ -6,21 +6,23 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.fitvalle.Exercise
-import com.example.fitvalle.ExerciseDao
-import com.example.fitvalle.ExerciseType
 import androidx.navigation.NavController
-import com.example.fitvalle.TargetMuscle
+import com.google.firebase.database.FirebaseDatabase
+import java.text.Normalizer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,13 +31,59 @@ fun SelectExercisesScreen(navController: NavController) {
     var exercises by remember { mutableStateOf<List<Exercise>>(emptyList()) }
     var selected by remember { mutableStateOf(setOf<Exercise>()) }
     var loading by remember { mutableStateOf(true) }
+    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
 
-    // Cargar ejercicios desde Firebase
+    // Mapas para músculos y tipos
+    var muscleMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var typeMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    val db = FirebaseDatabase
+        .getInstance("https://fitvalle-fced7-default-rtdb.firebaseio.com/")
+    val musclesDb = db.getReference("targetMuscles")
+    val typesDb = db.getReference("exerciseTypes")
+
+    // 🔥 Cargar ejercicios desde DAO + cargar nombres de músculos y tipos
     LaunchedEffect(Unit) {
         ExerciseDao().getAllExercises { list ->
-            exercises = list.map { it.first } // Ignoramos tipo y músculo por ahora
+            exercises = list.map { it.first } // Ignoramos tipo y músculo en el DAO
             loading = false
         }
+
+        musclesDb.get().addOnSuccessListener { snap ->
+            val map = mutableMapOf<String, String>()
+            snap.children.forEach {
+                val id = it.child("id").getValue(String::class.java)
+                val name = it.child("name").getValue(String::class.java)
+                if (id != null && name != null) map[id] = name
+            }
+            muscleMap = map
+        }
+
+        typesDb.get().addOnSuccessListener { snap ->
+            val map = mutableMapOf<String, String>()
+            snap.children.forEach {
+                val id = it.child("id").getValue(String::class.java)
+                val name = it.child("name").getValue(String::class.java)
+                if (id != null && name != null) map[id] = name
+            }
+            typeMap = map
+        }
+    }
+
+    // 🧠 Stopwords + funciones de limpieza
+    val stopwords = listOf(
+        "de", "la", "el", "en", "y", "para", "del", "los", "las", "con", "por", "un", "una", "al", "lo"
+    )
+
+    fun normalize(text: String): String {
+        return Normalizer.normalize(text.lowercase(), Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+    }
+
+    fun cleanQuery(text: String): List<String> {
+        return normalize(text)
+            .split(" ")
+            .filter { it.isNotBlank() && it !in stopwords }
     }
 
     Scaffold(
@@ -49,15 +97,26 @@ fun SelectExercisesScreen(navController: NavController) {
                 },
                 actions = {
                     IconButton(onClick = {
-                        // Enviar lista seleccionada al CreateTemplateScreen
-                        navController.previousBackStackEntry
-                            ?.savedStateHandle
-                            ?.set("selectedExercises", selected.map { it.name })
-                        navController.popBackStack()
+                        val selectedExerciseNames = selected.map { it.name }
+
+                        if (selectedExerciseNames.isNotEmpty()) {
+                            // ✅ Guardamos los ejercicios seleccionados en el backstack actual
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle
+                                ?.set("selectedExercises", selectedExerciseNames)
+
+                            // ✅ Navegamos hacia la pantalla de configuración
+                            navController.navigate("exerciseSetup")
+                        } else {
+                            // Si no seleccionaron nada, mostrar advertencia (opcional)
+                            println("⚠️ No se seleccionaron ejercicios")
+                        }
                     }) {
-                        Icon(Icons.Default.Done, contentDescription = "Guardar", tint = Color.White)
+                        Icon(Icons.Default.Done, contentDescription = "Continuar", tint = Color.White)
                     }
-                },
+
+                }
+                ,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
@@ -73,19 +132,63 @@ fun SelectExercisesScreen(navController: NavController) {
             if (loading) {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(exercises) { ex ->
-                        SelectableExerciseCard(
-                            exercise = ex,
-                            selected = selected.contains(ex),
-                            onSelect = {
-                                selected = if (selected.contains(ex)) {
-                                    selected - ex
-                                } else {
-                                    selected + ex
-                                }
-                            }
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 🔍 Campo de búsqueda
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text("Buscar por nombre, músculo o tipo...", color = Color.White) },
+                        textStyle = TextStyle(color = Color.White),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color.White
                         )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 🧠 Filtro avanzado
+                    val searchWords = cleanQuery(searchQuery.text)
+                    val filtered = if (searchWords.isEmpty()) {
+                        exercises
+                    } else {
+                        exercises.filter { ex ->
+                            val exerciseName = normalize(ex.name)
+                            val muscleName = normalize(muscleMap[ex.muscleID] ?: "")
+                            val typeName = normalize(typeMap[ex.typeID] ?: "")
+                            searchWords.any { word ->
+                                exerciseName.contains(word) ||
+                                        muscleName.contains(word) ||
+                                        typeName.contains(word)
+                            }
+                        }
+                    }
+
+                    if (filtered.isEmpty()) {
+                        Text(
+                            "No se encontraron ejercicios.",
+                            color = Color.White,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(filtered) { ex ->
+                                SelectableExerciseCard(
+                                    exercise = ex,
+                                    selected = selected.contains(ex),
+                                    onSelect = {
+                                        selected = if (selected.contains(ex)) {
+                                            selected - ex
+                                        } else {
+                                            selected + ex
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }

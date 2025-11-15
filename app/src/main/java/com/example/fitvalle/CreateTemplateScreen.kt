@@ -1,46 +1,55 @@
-package com.example.fitvalle.ui.screens
+package com.example.fitvalle
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateTemplateScreen(
-    navController: NavController,
-    onSave: (String, List<String>) -> Unit = { _, _ -> }
-) {
-    val gradient = Brush.verticalGradient(
-        colors = listOf(Color(0xFF8E0E00), Color(0xFF1F1C18))
-    )
+fun CreateTemplateScreen(navController: NavController) {
+    val fondo = Brush.verticalGradient(listOf(Color(0xFF8E0E00), Color(0xFF1F1C18)))
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    var plantillaName by remember { mutableStateOf(TextFieldValue("Nueva plantilla")) }
+    // 🔹 Estados persistentes
+    var templateName by rememberSaveable { mutableStateOf("") }
+    var exercises by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
-    // ✅ Escuchar los ejercicios seleccionados desde SelectExercisesScreen
-    val navBackStackEntry = navController.currentBackStackEntryAsState().value
-    val selectedExercisesFlow =
-        navBackStackEntry?.savedStateHandle?.getStateFlow<List<String>>("selectedExercises", emptyList())
+    // 🔹 Recuperar ejercicios seleccionados desde SelectExercisesScreen
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val savedExercises =
+        navBackStackEntry?.savedStateHandle
+            ?.getStateFlow<List<String>>("selectedExercises", emptyList())
+            ?.collectAsState()
 
-    val ejercicios by selectedExercisesFlow?.collectAsState() ?: remember { mutableStateOf(emptyList()) }
+    // 🔹 Si llegan nuevos ejercicios, actualiza la lista
+    LaunchedEffect(savedExercises?.value) {
+        savedExercises?.value?.let {
+            if (it.isNotEmpty()) exercises = it
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -58,8 +67,20 @@ fun CreateTemplateScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        onSave(plantillaName.text, ejercicios)
-                        navController.popBackStack()
+                        scope.launch {
+                            if (templateName.isBlank()) {
+                                snackbarHostState.showSnackbar("⚠️ Escribe un nombre para la plantilla")
+                                return@launch
+                            }
+                            val dao = TemplateDao()
+                            val success = dao.saveTemplate(templateName, exercises)
+                            if (success) {
+                                snackbarHostState.showSnackbar("✅ Plantilla guardada correctamente")
+                                navController.popBackStack() // volver a la pantalla anterior
+                            } else {
+                                snackbarHostState.showSnackbar("❌ Error al guardar la plantilla")
+                            }
+                        }
                     }) {
                         Icon(Icons.Default.Done, contentDescription = "Guardar", tint = Color.White)
                     }
@@ -72,7 +93,7 @@ fun CreateTemplateScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(gradient)
+                .background(fondo)
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
@@ -80,10 +101,10 @@ fun CreateTemplateScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.Start
             ) {
-                // 🏷️ Nombre de la plantilla editable
+                // 🏷️ Campo editable para el nombre
                 OutlinedTextField(
-                    value = plantillaName,
-                    onValueChange = { plantillaName = it },
+                    value = templateName,
+                    onValueChange = { templateName = it },
                     textStyle = TextStyle(
                         color = Color.White,
                         fontSize = 22.sp,
@@ -108,7 +129,7 @@ fun CreateTemplateScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "AÑADIR EJERCICIO",
+                        text = "AÑADIR EJERCICIOS",
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
@@ -117,7 +138,7 @@ fun CreateTemplateScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // 📋 Lista de ejercicios agregados
-                if (ejercicios.isEmpty()) {
+                if (exercises.isEmpty()) {
                     Text(
                         text = "Aún no has añadido ejercicios.",
                         color = Color.White.copy(alpha = 0.6f),
@@ -126,13 +147,13 @@ fun CreateTemplateScreen(
                     )
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(ejercicios.size) { index ->
+                        items(exercises) { exercise ->
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = ejercicios[index],
+                                    text = exercise,
                                     color = Color.White,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier.padding(16.dp)
@@ -145,3 +166,5 @@ fun CreateTemplateScreen(
         }
     }
 }
+
+

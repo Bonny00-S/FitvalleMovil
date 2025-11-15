@@ -21,18 +21,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
+// ✅ CORREGIDO: versión Realtime Database (sin Firestore)
 fun saveFcmToken(userId: String) {
     FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
         if (task.isSuccessful) {
             val token = task.result
-            FirebaseFirestore.getInstance()
-                .collection("users")
-                .document(userId)
-                .update("fcmToken", token)
+            val db = FirebaseDatabase
+                .getInstance("https://fitvalle-fced7-default-rtdb.firebaseio.com/")
+                .getReference("users")
+
+            // Guarda el token en Realtime Database
+            db.child(userId).child("fcmToken").setValue(token)
         }
     }
 }
@@ -46,10 +49,11 @@ fun LoginScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(false) }
 
+    // 🎨 Paleta de colores institucional
     val fondoPrincipal = Color(0xFF0D1525)
     val fondoSecundario = Color(0xFF182235)
     val primario = Color(0xFFB1163A)
-    val textoPrincipal = Color(0xFFFFFFFF)
+    val textoPrincipal = Color.White
     val textoSecundario = Color(0xFFAAB2C5)
 
     Scaffold(
@@ -69,6 +73,7 @@ fun LoginScreen(navController: NavController) {
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
             ) {
+                // 🧩 Logo
                 Image(
                     painter = painterResource(id = R.drawable.logo),
                     contentDescription = "Logo Fitvalle",
@@ -87,7 +92,7 @@ fun LoginScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(30.dp))
 
-
+                // 📧 Campo de correo
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -98,8 +103,8 @@ fun LoginScreen(navController: NavController) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .background(fondoSecundario, shape = RoundedCornerShape(50.dp)), // 🔥 borde circular
-                    shape = RoundedCornerShape(50.dp), // 🔥 borde circular
+                        .background(fondoSecundario, shape = RoundedCornerShape(50.dp)),
+                    shape = RoundedCornerShape(50.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = primario,
                         unfocusedBorderColor = textoSecundario,
@@ -113,7 +118,7 @@ fun LoginScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-
+                // 🔑 Campo de contraseña
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -125,7 +130,7 @@ fun LoginScreen(navController: NavController) {
                         .fillMaxWidth()
                         .height(56.dp)
                         .background(fondoSecundario, shape = RoundedCornerShape(50.dp)),
-                    shape = RoundedCornerShape(50.dp), // 🔥 borde circular
+                    shape = RoundedCornerShape(50.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = primario,
                         unfocusedBorderColor = textoSecundario,
@@ -137,9 +142,9 @@ fun LoginScreen(navController: NavController) {
                     )
                 )
 
-
                 Spacer(modifier = Modifier.height(20.dp))
 
+                // 🔘 Botón de inicio de sesión
                 Button(
                     enabled = !loading,
                     onClick = {
@@ -164,9 +169,15 @@ fun LoginScreen(navController: NavController) {
                                     val customerDao = CustomerDao()
                                     customerDao.existsCustomer(uid) { exists ->
                                         if (exists) {
-                                            navController.navigate("mainClientNav")
+                                            // ✅ Ruta corregida
+                                            navController.navigate("mainClient") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
                                         } else {
-                                            navController.navigate("welcome")
+                                            // ✅ Redirige si no es cliente
+                                            navController.navigate("welcome") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
                                         }
                                     }
                                 }
@@ -191,8 +202,9 @@ fun LoginScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // 🔹 Botón de registro
                 OutlinedButton(
-                    onClick = { navController.navigate("registro") },
+                    onClick = { navController.navigate("register") },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = primario),
                     border = ButtonDefaults.outlinedButtonBorder.copy(
                         width = 2.dp,
@@ -208,6 +220,7 @@ fun LoginScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // ⚖️ Política
                 Text(
                     "Política de Privacidad",
                     color = textoSecundario,

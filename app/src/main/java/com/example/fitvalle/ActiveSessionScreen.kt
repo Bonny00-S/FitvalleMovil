@@ -2,6 +2,7 @@ package com.example.fitvalle
 
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,51 +27,47 @@ fun ActiveSessionScreen(
     navController: NavController,
     routineId: String,
     onFinish: () -> Unit = {
-        navController.navigate("entrenamiento") {
-            popUpTo("entrenamiento") { inclusive = true }
+        navController.navigate("training") {
+            popUpTo("training") { inclusive = true }
         }
     },
-    onCancel: () -> Unit = {}
+    onCancel: () -> Unit = { navController.popBackStack() }
 ) {
     val gradient = Brush.verticalGradient(
-        colors = listOf(Color(0xFF8E0E00), Color(0xFF1F1C18))
+        colors = listOf(Color(0xFF0D1525), Color(0xFF182235))
     )
 
     var exercises by remember { mutableStateOf<List<SessionExercise>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var showConfirm by remember { mutableStateOf(false) }
-    var showIncompleteMessage by remember { mutableStateOf(false) } // 👈 nuevo
+
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // 🔹 Cargar ejercicios desde Firebase
     LaunchedEffect(sessionId) {
         val dao = SessionDao()
-        exercises = dao.getSessionExercises(sessionId)
-        loading = false
+        try {
+            exercises = dao.getSessionExercises(sessionId)
+        } catch (e: Exception) {
+            Log.e("ActiveSession", "Error al cargar ejercicios: ${e.message}")
+        } finally {
+            loading = false
+        }
     }
-
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "Entrenamiento",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Entrenamiento", color = Color.White, fontWeight = FontWeight.Bold) },
                 actions = {
                     TextButton(onClick = {
                         scope.launch {
-                            // 🔹 Filtramos ejercicios completados
                             val completedExercises = exercises.filter { it.completed }
-
                             if (completedExercises.isEmpty()) {
                                 snackbarHostState.showSnackbar(
-                                    message = "Debes completar al menos un ejercicio antes de terminar."
+                                    "Debes completar al menos un ejercicio antes de terminar."
                                 )
                                 return@launch
                             }
@@ -82,15 +79,15 @@ fun ActiveSessionScreen(
                                 customerId = customerId,
                                 routineId = routineId,
                                 sessionId = sessionId,
-                                exercisesDone = completedExercises // 👈 solo los completados
+                                exercisesDone = completedExercises
                             )
 
                             if (success) {
                                 dao.updateLastSessionTrained(customerId, sessionId)
-                                Log.i("ActiveSession", "✅ Sesión completada y progreso actualizado")
+                                snackbarHostState.showSnackbar("✅ Sesión completada correctamente.")
                                 onFinish()
                             } else {
-                                Log.e("ActiveSession", "❌ Error guardando sesión completada")
+                                snackbarHostState.showSnackbar("❌ Error al guardar sesión completada.")
                             }
                         }
                     }) {
@@ -100,18 +97,18 @@ fun ActiveSessionScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color.Transparent,
         bottomBar = {
             Button(
                 onClick = { showConfirm = true },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB1163A)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
                 Text("CANCELAR ENTRENAMIENTO", color = Color.White)
             }
-        }
+        },
+        containerColor = Color.Transparent
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -120,27 +117,38 @@ fun ActiveSessionScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            if (loading) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            when {
+                loading -> CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
+
+                exercises.isEmpty() -> Text(
+                    "No hay ejercicios asignados para esta sesión.",
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(exercises) { exercise ->
-                        ExerciseProgressCard(exercise) { checked ->
-                            // 🔹 Actualizamos el estado del ejercicio completado
+                        ExerciseProgressCard(
+                            exercise = exercise,
+                            navController = navController
+                        ) { checked ->
                             exercises = exercises.map {
-                                if (it.exerciseId == exercise.exerciseId) it.copy(completed = checked) else it
+                                if (it.exerciseId == exercise.exerciseId) it.copy(completed = checked)
+                                else it
                             }
                         }
                     }
                 }
             }
 
-            // 🔹 Confirmación de cancelación
             if (showConfirm) {
-                CancelTrainingDialog(onConfirm = {
-                    showConfirm = false
-                    onCancel()
-                }, onDismiss = { showConfirm = false })
+                CancelTrainingDialog(
+                    onConfirm = {
+                        showConfirm = false
+                        onCancel()
+                    },
+                    onDismiss = { showConfirm = false }
+                )
             }
         }
     }
@@ -149,6 +157,7 @@ fun ActiveSessionScreen(
 @Composable
 fun ExerciseProgressCard(
     exercise: SessionExercise,
+    navController: NavController,
     onCheckedChange: (Boolean) -> Unit
 ) {
     var completed by remember { mutableStateOf(exercise.completed) }
@@ -156,11 +165,20 @@ fun ExerciseProgressCard(
     Card(
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                // Navegar y mandar el ejercicio completo
+                navController.currentBackStackEntry
+                    ?.savedStateHandle
+                    ?.set("exerciseDetail", exercise)
+
+                navController.navigate("exerciseSessionDetail")
+            }
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(
-                text = exercise.exerciseName ?: "Ejercicio desconocido",
+                text = exercise.exerciseName ?: "Ejercicio sin nombre",
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
@@ -174,8 +192,11 @@ fun ExerciseProgressCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("SERIES: ${exercise.sets}", color = Color(0xFFFFCDD2))
-                    Text("REPS: ${exercise.reps}", color = Color(0xFFFFCDD2))
+                    Text("Series: ${exercise.sets}", color = Color(0xFFFFCDD2))
+                    Text("Reps: ${exercise.reps}", color = Color(0xFFFFCDD2))
+                    Text("Peso: ${exercise.weight} kg", color = Color(0xFFFFCDD2))
+                    Text("Velocidad: ${exercise.speed}", color = Color(0xFFFFCDD2))
+                    Text("Duración: ${exercise.duration} min", color = Color(0xFFFFCDD2))
                 }
 
                 Checkbox(
@@ -185,7 +206,7 @@ fun ExerciseProgressCard(
                         onCheckedChange(it)
                     },
                     colors = CheckboxDefaults.colors(
-                        checkedColor = Color(0xFFD50000),
+                        checkedColor = Color(0xFFD12B56),
                         uncheckedColor = Color.White
                     )
                 )
@@ -193,6 +214,7 @@ fun ExerciseProgressCard(
         }
     }
 }
+
 
 @Composable
 fun CancelTrainingDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
@@ -204,7 +226,7 @@ fun CancelTrainingDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     ) {
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF182235)),
             modifier = Modifier
                 .fillMaxWidth(0.85f)
                 .padding(24.dp)
@@ -215,18 +237,9 @@ fun CancelTrainingDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Cancelar entrenamiento",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                )
+                Text("Cancelar entrenamiento", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "¿Seguro que deseas cancelar la sesión actual?",
-                    color = Color(0xFFFFCDD2),
-                    fontSize = 16.sp
-                )
+                Text("¿Seguro que deseas cancelar la sesión actual?", color = Color(0xFFFFCDD2), fontSize = 16.sp)
                 Spacer(Modifier.height(20.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -234,7 +247,7 @@ fun CancelTrainingDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                 ) {
                     Button(
                         onClick = onConfirm,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E0E00))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB1163A))
                     ) {
                         Text("Sí, cancelar", color = Color.White)
                     }

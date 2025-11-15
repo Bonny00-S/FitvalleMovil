@@ -108,6 +108,28 @@ class UserDao {
         })
     }
 
+    // 📌 Obtener todos los entrenadores (role = "coach")
+    fun getAllCoaches(callback: (List<User>) -> Unit) {
+        dbRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val coaches = mutableListOf<User>()
+                for (dato in snapshot.children) {
+                    val usuario = dato.getValue(User::class.java)
+                    if (usuario != null && usuario.role == "coach") {
+                        coaches.add(usuario)
+                    }
+                }
+                callback(coaches)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FIREBASE", "Error al obtener entrenadores: ${error.message}")
+                callback(emptyList())
+            }
+        })
+    }
+
+
     // 📌 Actualizar usuario
     fun updateUser(key: String, user: User, callback: (Boolean, String) -> Unit) {
         dbRef.child(key).setValue(user)

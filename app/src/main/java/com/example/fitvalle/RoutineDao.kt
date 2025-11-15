@@ -1,7 +1,6 @@
-package com.example.fitvalle.data.dao
+package com.example.fitvalle
 
 import com.example.fitvalle.Routine
-//import com.example.fitvalle.data.model.Routine
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.tasks.await
@@ -10,160 +9,123 @@ import com.example.fitvalle.Session
 import com.example.fitvalle.SessionExercise
 import com.example.fitvalle.SessionWithExercises
 
+import kotlinx.coroutines.tasks.await
 class RoutineDao {
 
-    private val db = FirebaseDatabase.getInstance().reference
+    // 👉 usamos tu misma URL
+    private val db = FirebaseDatabase
+        .getInstance("https://fitvalle-fced7-default-rtdb.firebaseio.com/")
+        .reference
+
     private val auth = FirebaseAuth.getInstance()
 
-
+    /**
+     * 🔹 Rutinas que me asignó el coach
+     * Busca en /routine y se queda solo con las que tengan customerId == uid
+     */
     suspend fun getAssignedRoutines(): List<Routine> {
         val uid = auth.currentUser?.uid ?: return emptyList()
-        val snapshot = db.child("assignedRoutines").child(uid).get().await()
+        val snapshot = db.child("routine").get().await()
+        val result = mutableListOf<Routine>()
 
-        val routines = mutableListOf<Routine>()
         for (routineSnap in snapshot.children) {
-            val routine = routineSnap.getValue(Routine::class.java)
-            if (routine != null) {
-                // asegurar id
-                val routineWithId = routine.copy(id = (routineSnap.key ?: routine.id))
+            val customerId = routineSnap.child("customerId").getValue(String::class.java)
+            if (customerId == uid) {
+                val routine = routineSnap.getValue(Routine::class.java)
+                if (routine != null) {
+                    routine.id = routineSnap.key ?: routine.id
 
-                // ---- Intento 1: leer en "user" (según tu DB mostraste 'user')
-                // si en tu base de datos la colección / nodo es "users", cambia a "users"
-                val coachId = routineWithId.coachId.trim()
-                var coachName: String? = null
+                    // 🔹 Cargar nombre del coach
+                    val coachId = routine.coachId
+                    if (!coachId.isNullOrEmpty()) {
+                        routine.coachName = getCoachName(coachId) ?: "Entrenador"
+                    }
 
-                try {
-                    // 1) probar en "user"
-                    val coachSnap1 = db.child("user").child(coachId).get().await()
-                    if (coachSnap1.exists()) {
-                        coachName = coachSnap1.child("name").getValue(String::class.java)
-                        Log.d("RoutineDao", "Coach encontrado en /user: $coachName")
-                    } else {
-                        // 2) fallback: probar en "users"
-                        val coachSnap2 = db.child("users").child(coachId).get().await()
-                        if (coachSnap2.exists()) {
-                            coachName = coachSnap2.child("name").getValue(String::class.java)
-                            Log.d("RoutineDao", "Coach encontrado en /users: $coachName")
-                        } else {
-                            // 3) fallback adicional: buscar por iteración (solo para debug, quitar en prod)
-                            val usersAll = db.child("user").get().await()
-                            for (u in usersAll.children) {
-                                val id = u.key ?: continue
-                                val nm = u.child("name").getValue(String::class.java)
-                                if (id == coachId || nm != null && nm.contains(coachId)) {
-                                    coachName = nm
-                                    Log.d("RoutineDao", "Coach heurístico encontrado: $coachName (id=$id)")
-                                    break
+                    // 🔹 Cargar las sesiones de la rutina
+                    val sessionsMap = mutableMapOf<String, Session>()
+                    val sessionsSnap = routineSnap.child("sessions")
+                    if (sessionsSnap.exists()) {
+                        for (sessionSnap in sessionsSnap.children) {
+                            val session = sessionSnap.getValue(Session::class.java)
+                            if (session != null) {
+                                val sessionId = sessionSnap.key ?: session.id
+
+                                // 🔹 Cargar ejercicios de la sesión
+                                val exSnap = db.child("sessionExercises")
+                                    .child(sessionId)
+                                    .get()
+                                    .await()
+
+                                val exercisesMap = mutableMapOf<String, SessionExercise>()
+                                for (exChild in exSnap.children) {
+                                    val exercise = exChild.getValue(SessionExercise::class.java)
+                                    if (exercise != null) {
+                                        exercisesMap[exChild.key ?: ""] = exercise
+                                    }
                                 }
+
+                                // Agregar sesión completa con ejercicios
+                                sessionsMap[sessionId] = session.copy(
+                                    id = sessionId,
+                                    sessionExercises = exercisesMap
+                                )
                             }
                         }
                     }
-                } catch (e: Exception) {
-                    Log.e("RoutineDao", "Error buscando coach name: ${e.message}", e)
-                }
 
-                routineWithId.coachName = coachName ?: "Entrenador desconocido"
-                routines.add(routineWithId)
+                    // 🔹 Añadir las sesiones cargadas
+                    result.add(routine.copy(sessions = sessionsMap))
+                }
             }
         }
 
-        return routines
+        return result
     }
 
-//    suspend fun getRoutineDetail(routineId: String): List<com.example.fitvalle.Exercise> {
-//        val uid = auth.currentUser?.uid ?: return emptyList()
-//        val routineSnap = db.child("assignedRoutines").child(uid).child(routineId).get().await()
-//
-//        val exercisesList = mutableListOf<com.example.fitvalle.Exercise>()
-//
-//        // Recorremos las sesiones
-//        for (sessionSnap in routineSnap.child("sessions").children) {
-//            val exercisesSnap = sessionSnap.child("exercises")
-//            if (!exercisesSnap.exists()) continue
-//
-//            // Recorremos cada ejercicio dentro de la sesión
-//            for (exSnap in exercisesSnap.children) {
-//                val exerciseId = exSnap.child("exerciseId").getValue(String::class.java)
-//                val sets = exSnap.child("sets").getValue(Int::class.java) ?: 0
-//                val reps = exSnap.child("reps").getValue(Int::class.java) ?: 0
-//
-//                if (exerciseId != null) {
-//                    try {
-//                        val exerciseData = db.child("exercise").child(exerciseId).get().await()
-//                        val ex = exerciseData.getValue(com.example.fitvalle.Exercise::class.java)
-//
-//                        if (ex != null) {
-//                            // Buscar nombre del músculo
-//                            val muscleSnap = db.child("targetMuscles").child(ex.muscleID ?: "").get().await()
-//                            val muscleName = muscleSnap.child("name").getValue(String::class.java) ?: "Desconocido"
-//
-//                            val finalExercise = ex.copy(
-//                                series = sets,
-//                                repetitions = reps.toString(),
-//                                muscleID = muscleName // reemplazamos ID por nombre
-//                            )
-//                            exercisesList.add(finalExercise)
-//                        }
-//                    } catch (e: Exception) {
-//                        Log.e("RoutineDao", "Error leyendo ejercicio $exerciseId: ${e.message}")
-//                    }
-//                }
-//
-//            }
-//        }
-//
-//        return exercisesList
-//    }
 
-    suspend fun getRoutineDetailBySessions(routineId: String): List<com.example.fitvalle.SessionWithExercises> {
-        val uid = auth.currentUser?.uid ?: return emptyList()
-        val routineSnap = db.child("assignedRoutines").child(uid).child(routineId).get().await()
+    /**
+     * 🔹 Lee las sesiones que pertenecen a una rutina
+     * Ruta: /routine/{routineId}/sessions
+     */
+    suspend fun getSessionsByRoutine(routineId: String): List<Session> {
+        return try {
+            val snap = db.child("routine")
+                .child(routineId)
+                .child("sessions")
+                .get()
+                .await()
 
-        val sessionsList = mutableListOf<com.example.fitvalle.SessionWithExercises>()
-
-        // 🔹 Recorremos las sesiones
-        for (sessionSnap in routineSnap.child("sessions").children) {
-            val sessionId = sessionSnap.key ?: continue
-            val exercisesSnap = sessionSnap.child("exercises")
-            if (!exercisesSnap.exists()) continue
-
-            val exercisesList = mutableListOf<com.example.fitvalle.Exercise>()
-
-            // 🔹 Recorremos cada ejercicio
-            for (exSnap in exercisesSnap.children) {
-                val exerciseId = exSnap.child("exerciseId").getValue(String::class.java)
-                val sets = exSnap.child("sets").getValue(Int::class.java) ?: 0
-                val reps = exSnap.child("reps").getValue(Int::class.java) ?: 0
-
-                if (exerciseId != null) {
-                    try {
-                        val exerciseData = db.child("exercise").child(exerciseId).get().await()
-                        val ex = exerciseData.getValue(com.example.fitvalle.Exercise::class.java)
-
-                        if (ex != null) {
-                            val muscleSnap = db.child("targetMuscles").child(ex.muscleID ?: "").get().await()
-                            val muscleName = muscleSnap.child("name").getValue(String::class.java) ?: "Desconocido"
-
-                            val finalExercise = ex.copy(
-                                series = sets,
-                                repetitions = reps.toString(),
-                                muscleID = muscleName
-                            )
-
-                            exercisesList.add(finalExercise)
-                        }
-                    } catch (e: Exception) {
-                        Log.e("RoutineDao", "Error leyendo ejercicio $exerciseId: ${e.message}")
-                    }
-                }
+            snap.children.mapNotNull { sessionSnap ->
+                val session = sessionSnap.getValue(Session::class.java)
+                session?.copy(id = sessionSnap.key ?: "")
             }
-
-            sessionsList.add(com.example.fitvalle.SessionWithExercises(sessionId, exercisesList))
+        } catch (e: Exception) {
+            Log.e("RoutineDao", "Error leyendo sesiones de rutina: ${e.message}")
+            emptyList()
         }
-
-        return sessionsList
     }
 
+    /**
+     * 🔹 Devuelve los ejercicios de una sesión leyendo /sessionExercises/{sessionId}
+     * (esto es por si ya lo usas en ActiveSessionScreen)
+     */
+    suspend fun getExercisesForSession(sessionId: String): List<SessionExercise> {
+        return try {
+            val snap = db.child("sessionExercises")
+                .child(sessionId)
+                .get()
+                .await()
+
+            snap.children.mapNotNull { it.getValue(SessionExercise::class.java) }
+        } catch (e: Exception) {
+            Log.e("RoutineDao", "Error leyendo ejercicios de la sesión: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * 🔹 Guarda una rutina en /routine (por si el coach o admin crean desde la app)
+     */
     suspend fun saveUserRoutine(userId: String, routine: Routine) {
         try {
             val routineId = if (routine.id.isNotEmpty()) {
@@ -185,65 +147,53 @@ class RoutineDao {
             Log.e("RoutineDao", "Error guardando rutina: ${e.message}", e)
         }
     }
-    suspend fun getAllRoutinesForUser(): List<Routine> {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyList()
-        val database = FirebaseDatabase.getInstance().reference
 
+    /**
+     * 🔹 Por si en algún lado quieres mezclar las rutinas base + asignadas
+     */
+    suspend fun getAllRoutinesForUser(): List<Routine> {
+        val uid = auth.currentUser?.uid ?: return emptyList()
         val routines = mutableListOf<Routine>()
 
-        // 1️⃣ Plantillas por defecto (o propias)
-        val defaultSnapshot = database.child("routine").get().await()
-        for (routineSnap in defaultSnapshot.children) {
-            val routine = routineSnap.getValue(Routine::class.java)
-            if (routine != null) {
-                routine.id = routineSnap.key ?: ""
-                routines.add(routine)
-            }
-        }
+        // 1) todas las rutinas
+        val allSnap = db.child("routine").get().await()
+        for (rSnap in allSnap.children) {
+            val routine = rSnap.getValue(Routine::class.java) ?: continue
+            routine.id = rSnap.key ?: ""
 
-        // 2️⃣ Rutinas asignadas (de coaches)
-        val assignedSnapshot = database.child("assignedRoutines").child(userId).get().await()
-        for (routineSnap in assignedSnapshot.children) {
-            val routine = routineSnap.getValue(Routine::class.java)
-            if (routine != null) {
-                routine.id = routineSnap.key ?: ""
-                val coachId = routine.coachId
-
-                // 🔹 Obtener el nombre del coach
-                if (!coachId.isNullOrEmpty()) {
-                    val coachSnap = database.child("users").child(coachId).get().await()
-                    val coachName = coachSnap.child("name").getValue(String::class.java)
-                    routine.coachName = coachName ?: "Entrenador"
+            // si tiene customerId y es mío, la agrego
+            val customerId = routine.customerId
+            if (customerId == null || customerId == uid) {
+                // intentar obtener nombre del coach
+                val coachId = routine.coachId ?: ""
+                if (coachId.isNotEmpty()) {
+                    routine.coachName = getCoachName(coachId) ?: "Entrenador"
                 }
-
                 routines.add(routine)
             }
         }
 
         return routines
     }
-    suspend fun getSessionsByRoutine(routineId: String): List<Session> {
-        val uid = auth.currentUser?.uid ?: return emptyList()
 
+    /**
+     * 🔹 Helper para leer el nombre del coach
+     * prueba en /user y luego en /users
+     */
+    private suspend fun getCoachName(coachId: String): String? {
         return try {
-            // Ruta real: assignedRoutines/{uid}/{routineId}/sessions
-            val snapshot = db
-                .child("assignedRoutines")
-                .child(uid)
-                .child(routineId)
-                .child("sessions")
-                .get()
-                .await()
-
-            snapshot.children.mapNotNull { sessionSnap ->
-                val session = sessionSnap.getValue(Session::class.java)
-                session?.copy(id = sessionSnap.key ?: "")
+            val userNode = db.child("user").child(coachId).get().await()
+            if (userNode.exists()) {
+                userNode.child("name").getValue(String::class.java)
+            } else {
+                val usersNode = db.child("users").child(coachId).get().await()
+                if (usersNode.exists()) {
+                    usersNode.child("name").getValue(String::class.java)
+                } else null
             }
         } catch (e: Exception) {
-            Log.e("RoutineDao", "Error leyendo sesiones: ${e.message}", e)
-            emptyList()
+            Log.e("RoutineDao", "Error obteniendo nombre del coach: ${e.message}")
+            null
         }
     }
-
-
 }

@@ -8,5 +8,12 @@ data class User(
     val role: String = "client",
     val userId: Int? = null,              // opcional
     val state: Int = 1,                   // 1 activo por defecto
-    val registerDate: String = ""
+    val registerDate: String = "",
+
+    // 🔹 Nuevos campos para el perfil de entrenador:
+    val description: String = "",       // breve biografía
+    val photoUrl: String = "",          // URL completa o parcial
+    val specialty: String = "",         // tipo de entrenamiento
+    val students: Int = 0,              // número total de alumnos
+    val activeStudents: Int = 0         // alumnos activos
 )

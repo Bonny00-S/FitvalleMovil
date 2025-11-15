@@ -2,6 +2,7 @@ package com.example.fitvalle
 
 data class Routine(
     var id: String = "",
+    var name: String = "",
     val coachId: String = "",
     val customerId: String = "",
     val registerDate: String = "",

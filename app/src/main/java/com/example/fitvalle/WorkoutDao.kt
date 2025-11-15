@@ -1,37 +1,63 @@
-package com.example.fitvalle.data.dao
+package com.example.fitvalle
 
-import com.example.fitvalle.Workout
-//import com.example.fitvalle.data.model.Workout
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.*
 
 class WorkoutDao {
 
-    private val db = FirebaseFirestore.getInstance()
+    private val db = FirebaseDatabase
+        .getInstance("https://fitvalle-fced7-default-rtdb.firebaseio.com/")
+        .getReference("workouts")
+
     private val auth = FirebaseAuth.getInstance()
 
-    // 🔹 Guardar nuevo entrenamiento
-    suspend fun addWorkout(workout: Workout) {
-        val userId = auth.currentUser?.uid ?: return
-        val workoutId = db.collection("workouts").document().id
+    /**
+     * 🔹 Guarda un nuevo entrenamiento en Realtime Database
+     */
+    suspend fun saveWorkout(title: String, exercises: List<String>): Boolean {
+        val userId = auth.currentUser?.uid ?: return false
+        val id = db.push().key ?: return false
+        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-        val newWorkout = workout.copy(
-            id = workoutId,
-            userId = userId
+        val workout = Workout(
+            id = id,
+            userId = userId,
+            title = title,
+            exercises = exercises,
+            createdAt = date
         )
 
-        db.collection("workouts").document(workoutId).set(newWorkout).await()
+        db.child(userId).child(id).setValue(workout).await()
+        return true
     }
 
-    // 🔹 Obtener entrenamientos del usuario (para historial)
-    suspend fun getWorkoutsForUser(): List<Workout> {
+    /**
+     * 🔹 Obtiene todos los entrenamientos del usuario actual
+     */
+    suspend fun getUserWorkouts(): List<Workout> {
         val userId = auth.currentUser?.uid ?: return emptyList()
-        val snapshot = db.collection("workouts")
-            .whereEqualTo("userId", userId)
-            .get()
-            .await()
+        val snapshot = db.child(userId).get().await()
+        return snapshot.children.mapNotNull { it.getValue(Workout::class.java) }
+    }
 
-        return snapshot.toObjects(Workout::class.java)
+    /**
+     * 🔹 Obtiene un entrenamiento específico por su ID
+     */
+    suspend fun getWorkoutById(workoutId: String): Workout? {
+        val userId = auth.currentUser?.uid ?: return null
+        val snapshot = db.child(userId).child(workoutId).get().await()
+        return snapshot.getValue(Workout::class.java)
+    }
+
+    /**
+     * 🔹 Elimina un entrenamiento del usuario actual
+     */
+    suspend fun deleteWorkout(workoutId: String): Boolean {
+        val userId = auth.currentUser?.uid ?: return false
+        db.child(userId).child(workoutId).removeValue().await()
+        return true
     }
 }

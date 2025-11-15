@@ -15,25 +15,35 @@ class SessionDao {
         return try {
             val list = mutableListOf<SessionExercise>()
             val nodeSnap = sessionExercisesRef.child(sessionId).get().await()
+
             if (nodeSnap.exists()) {
                 for (exChild in nodeSnap.children) {
-                    val exObj = exChild.getValue(SessionExercise::class.java)
-                    val exercise = exObj ?: SessionExercise(
-                        exerciseId = exChild.child("exerciseId").getValue(String::class.java),
+                    val exerciseId = exChild.child("exerciseId").getValue(String::class.java) ?: continue
+
+                    val exercise = SessionExercise(
                         sessionId = sessionId,
-                        reps = exChild.child("reps").getValue(Int::class.java),
-                        sets = exChild.child("sets").getValue(Int::class.java)
-                    )
-                    exercise.exerciseName = getExerciseName(exercise.exerciseId)
+                        exerciseId = exerciseId,
+                        sets = exChild.child("sets").getValue(Int::class.java) ?: 0,
+                        reps = exChild.child("reps").getValue(Int::class.java) ?: 0,
+                        weight = exChild.child("weight").getValue(Int::class.java) ?: 0,
+                        speed = exChild.child("speed").getValue(Int::class.java) ?: 0,
+                        duration = exChild.child("duration").getValue(Int::class.java) ?: 0
+                    ).apply {
+                        exerciseName = getExerciseName(exerciseId)
+                    }
+
                     list.add(exercise)
                 }
             }
+
             list
         } catch (e: Exception) {
             Log.e("SessionDao", "Error getSessionExercises: ${e.message}", e)
             emptyList()
         }
     }
+
+
 
 
     private suspend fun getExerciseName(exerciseId: String?): String? {
@@ -113,4 +123,3 @@ class SessionDao {
     }
 
 }
-

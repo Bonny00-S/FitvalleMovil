@@ -8,9 +8,7 @@ data class Exercise(
     val typeID: String = "",
     val muscleID: String = "",
     val registerDate: String = "",
-    //
-    val series: Int = 4,
-    val repetitions: String = "10-12",
-    val restTime: Int = 60,
-    val instructions: List<String> = listOf()
+    val series: Int = 0,
+    val repetitions: String = "",
+    val restTime: Int = 0
 )

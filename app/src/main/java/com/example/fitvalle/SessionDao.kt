@@ -72,6 +72,11 @@ class SessionDao {
         exercisesDone: List<SessionExercise>
     ): Boolean {
         return try {
+            Log.d("SessionDao", "🔹 Guardando sesión completada con ${exercisesDone.size} ejercicios")
+            exercisesDone.forEachIndexed { index, exercise ->
+                Log.d("SessionDao", "  [$index] ${exercise.exerciseName}: Sets=${exercise.sets}, Reps=${exercise.reps}, Weight=${exercise.weight}, Speed=${exercise.speed}, Duration=${exercise.duration}")
+            }
+            
             val completedSessionRef = dbRoot.child("completedSessions").push()
             val completedData = mapOf(
                 "id" to completedSessionRef.key,
@@ -84,11 +89,15 @@ class SessionDao {
                         "exerciseId" to it.exerciseId,
                         "exerciseName" to it.exerciseName,
                         "sets" to it.sets,
-                        "reps" to it.reps
+                        "reps" to it.reps,
+                        "weight" to it.weight,
+                        "speed" to it.speed,
+                        "duration" to it.duration
                     )
                 }
             )
             completedSessionRef.setValue(completedData).await()
+            Log.d("SessionDao", "✅ Sesión guardada correctamente con ID: ${completedSessionRef.key}")
             true
         } catch (e: Exception) {
             Log.e("SessionDao", "Error guardando sesión completada: ${e.message}", e)

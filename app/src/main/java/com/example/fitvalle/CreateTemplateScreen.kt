@@ -65,28 +65,39 @@ fun CreateTemplateScreen(navController: NavController) {
                         Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Color.White)
                     }
                 },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            if (templateName.isBlank()) {
-                                snackbarHostState.showSnackbar("⚠️ Escribe un nombre para la plantilla")
-                                return@launch
-                            }
-                            val dao = TemplateDao()
-                            val success = dao.saveTemplate(templateName, exercises)
-                            if (success) {
-                                snackbarHostState.showSnackbar("✅ Plantilla guardada correctamente")
-                                navController.popBackStack() // volver a la pantalla anterior
-                            } else {
-                                snackbarHostState.showSnackbar("❌ Error al guardar la plantilla")
-                            }
-                        }
-                    }) {
-                        Icon(Icons.Default.Done, contentDescription = "Guardar", tint = Color.White)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
+        },
+        floatingActionButton = {
+            Button(
+                onClick = {
+                    scope.launch {
+                        if (templateName.isBlank()) {
+                            snackbarHostState.showSnackbar("⚠️ Escribe un nombre para la plantilla")
+                            return@launch
+                        }
+                        if (exercises.isEmpty()) {
+                            snackbarHostState.showSnackbar("⚠️ Añade al menos un ejercicio")
+                            return@launch
+                        }
+                        // Navegar a personalización pasando el nombre en la ruta
+                        val encodedName = java.net.URLEncoder.encode(templateName, "UTF-8")
+                        navController.navigate("personalizeTemplateExercises/$encodedName")
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC41C3B)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(56.dp)
+            ) {
+                Text(
+                    text = "Guardar cambios",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
         },
         containerColor = Color.Transparent
     ) { innerPadding ->
@@ -98,7 +109,9 @@ fun CreateTemplateScreen(navController: NavController) {
                 .padding(16.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 80.dp),
                 horizontalAlignment = Alignment.Start
             ) {
                 // 🏷️ Campo editable para el nombre
@@ -123,9 +136,19 @@ fun CreateTemplateScreen(navController: NavController) {
 
                 // 🔴 Botón para añadir ejercicios
                 Button(
-                    onClick = { navController.navigate("selectExercises") },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD50000)),
-                    shape = RoundedCornerShape(8.dp),
+                    onClick = {
+                        if (templateName.isBlank()) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("⚠️ Escribe un nombre para la plantilla primero")
+                            }
+                        } else {
+                            // Pasar el nombre de plantilla antes de navegar
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle
+                                ?.set("templateName", templateName)
+                            navController.navigate("selectExercises")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(

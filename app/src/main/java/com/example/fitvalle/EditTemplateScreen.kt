@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
@@ -50,7 +51,7 @@ fun EditTemplateScreen(
     var newName by remember { mutableStateOf("") }
 
     // lista de ejercicios dentro de la plantilla
-    val exercises = remember { mutableStateListOf<String>() }
+    val exercises = remember { mutableStateListOf<TemplateExercise>() }
 
     var loading by remember { mutableStateOf(true) }
 
@@ -61,6 +62,13 @@ fun EditTemplateScreen(
 
     // índice seleccionado
     var selectedIndex by remember { mutableStateOf<Int?>(null) }
+    // diálogo para editar ejercicio
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editSets by remember { mutableStateOf("") }
+    var editReps by remember { mutableStateOf("") }
+    var editWeight by remember { mutableStateOf("") }
+    var editSpeed by remember { mutableStateOf("") }
+    var editDuration by remember { mutableStateOf("") }
 
     // 1. cargar plantilla
     LaunchedEffect(templateId) {
@@ -166,7 +174,7 @@ fun EditTemplateScreen(
                             .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        itemsIndexed(exercises) { index, name ->
+                        itemsIndexed(exercises) { index, exercise ->
                             Card(
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (selectedIndex == index)
@@ -175,7 +183,17 @@ fun EditTemplateScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .combinedClickable(
-                                        onClick = { /* nada */ },
+                                        onClick = {
+                                            // abrir diálogo de edición para este ejercicio
+                                            selectedIndex = index
+                                            val ex = exercises[index]
+                                            editSets = ex.sets.toString()
+                                            editReps = ex.reps.toString()
+                                            editWeight = ex.weight.toString()
+                                            editSpeed = ex.speed.toString()
+                                            editDuration = ex.duration.toString()
+                                            showEditDialog = true
+                                        },
                                         onLongClick = { selectedIndex = index }
                                     )
                             ) {
@@ -186,10 +204,18 @@ fun EditTemplateScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "${index + 1}. $name",
-                                        color = Color.White
-                                    )
+                                    Column {
+                                        Text(
+                                            text = "${index + 1}. ${exercise.exerciseName}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "S: ${exercise.sets} | R: ${exercise.reps} | P: ${exercise.weight}kg",
+                                            color = Color(0xFFFFCDD2),
+                                            fontSize = 12.sp
+                                        )
+                                    }
 
                                     Row {
                                         if (selectedIndex == index) {
@@ -354,8 +380,17 @@ fun EditTemplateScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        if (!exercises.contains(ex.name)) {
-                                            exercises.add(ex.name)
+                                        val newExercise = TemplateExercise(
+                                            exerciseId = ex.id,
+                                            exerciseName = ex.name,
+                                            sets = 3,
+                                            reps = 10,
+                                            weight = 0,
+                                            speed = 0,
+                                            duration = 0
+                                        )
+                                        if (!exercises.any { it.exerciseId == ex.id }) {
+                                            exercises.add(newExercise)
                                         }
                                         showAddDialog = false
                                         searchQuery = ""
@@ -384,6 +419,101 @@ fun EditTemplateScreen(
                 }
             },
             confirmButton = {},
+            containerColor = Color(0xFF2B1A1A)
+        )
+    }
+
+    // 🔻 diálogo para editar ejercicio
+    if (showEditDialog && selectedIndex != null) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Editar ejercicio", color = Color.White) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editSets,
+                        onValueChange = { editSets = it },
+                        label = { Text("Series", color = Color.White) },
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editReps,
+                        onValueChange = { editReps = it },
+                        label = { Text("Reps", color = Color.White) },
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editWeight,
+                        onValueChange = { editWeight = it },
+                        label = { Text("Peso (kg)", color = Color.White) },
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editSpeed,
+                        onValueChange = { editSpeed = it },
+                        label = { Text("Velocidad", color = Color.White) },
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editDuration,
+                        onValueChange = { editDuration = it },
+                        label = { Text("Duración (min)", color = Color.White) },
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val idx = selectedIndex ?: return@TextButton
+                    val old = exercises[idx]
+                    val updated = old.copy(
+                        sets = editSets.toIntOrNull() ?: old.sets,
+                        reps = editReps.toIntOrNull() ?: old.reps,
+                        weight = editWeight.toIntOrNull() ?: old.weight,
+                        speed = editSpeed.toIntOrNull() ?: old.speed,
+                        duration = editDuration.toIntOrNull() ?: old.duration
+                    )
+                    exercises[idx] = updated
+                    showEditDialog = false
+                }) {
+                    Text("Guardar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancelar", color = Color.White)
+                }
+            },
             containerColor = Color(0xFF2B1A1A)
         )
     }

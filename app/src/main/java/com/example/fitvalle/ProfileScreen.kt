@@ -16,11 +16,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import android.graphics.BitmapFactory
+import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 
@@ -47,6 +50,7 @@ fun ProfileScreen(
     var userData by remember { mutableStateOf<User?>(null) }
     var customerData by remember { mutableStateOf<Customer?>(null) }
     var avatarName by remember { mutableStateOf("avatar1") }
+    var sharedAvatarImage by remember { mutableStateOf<ByteArray?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
     // 🔹 Cargar datos
@@ -79,7 +83,30 @@ fun ProfileScreen(
             dbAvatars.child(userId).child("avatar")
                 .addValueEventListener(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
-                        avatarName = snapshot.getValue(String::class.java) ?: "avatar1"
+                        val avatar = snapshot.getValue(String::class.java) ?: "avatar1"
+                        avatarName = avatar
+
+                        // Si es un avatar compartido, cargar desde sharedAvatars
+                        if (avatar.startsWith("shared_")) {
+                            val sharedId = avatar.substring(7) // quitar "shared_"
+                            dbAvatars.parent?.child("sharedAvatars")?.child(sharedId)
+                                ?.addListenerForSingleValueEvent(object : ValueEventListener {
+                                    override fun onDataChange(sharedSnap: DataSnapshot) {
+                                        val imageBase64 = sharedSnap.child("imageBase64").getValue(String::class.java)
+                                        if (imageBase64 != null) {
+                                            try {
+                                                sharedAvatarImage = Base64.decode(imageBase64, Base64.DEFAULT)
+                                            } catch (ex: Exception) {
+                                                sharedAvatarImage = null
+                                            }
+                                        }
+                                    }
+
+                                    override fun onCancelled(error: DatabaseError) {}
+                                })
+                        } else {
+                            sharedAvatarImage = null
+                        }
                     }
 
                     override fun onCancelled(error: DatabaseError) {}
@@ -128,15 +155,34 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // 👤 Avatar
-                    Image(
-                        painter = painterResource(id = avatarRes),
-                        contentDescription = "Avatar actual",
-                        modifier = Modifier
-                            .size(140.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2E1A1A))
-                            .clickable { navController.navigate("editAvatar") }
-                    )
+                    if (sharedAvatarImage != null) {
+                        // Mostrar avatar compartido desde Base64
+                        val bitmap = remember(sharedAvatarImage) {
+                            BitmapFactory.decodeByteArray(sharedAvatarImage!!, 0, sharedAvatarImage!!.size)
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "Avatar compartido",
+                                modifier = Modifier
+                                    .size(140.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2E1A1A))
+                                    .clickable { navController.navigate("editAvatar") }
+                            )
+                        }
+                    } else {
+                        // Mostrar avatar local predefinido
+                        Image(
+                            painter = painterResource(id = avatarRes),
+                            contentDescription = "Avatar actual",
+                            modifier = Modifier
+                                .size(140.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2E1A1A))
+                                .clickable { navController.navigate("editAvatar") }
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Avatar actual", color = Color.White, fontSize = 15.sp)

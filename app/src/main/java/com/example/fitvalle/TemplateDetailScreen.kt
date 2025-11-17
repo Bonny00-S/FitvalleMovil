@@ -146,17 +146,32 @@ fun TemplateDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            itemsIndexed(template!!.exercises) { index, exerciseName ->
+                            itemsIndexed(template!!.exercises) { index, ex ->
+                                // ex es TemplateExercise
                                 Card(
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1A1A)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(Modifier.padding(16.dp)) {
                                         Text(
-                                            text = "${index + 1}. $exerciseName",
+                                            text = "${index + 1}. ${ex.exerciseName}",
                                             color = Color.White,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 16.sp
+                                        )
+
+                                        Spacer(Modifier.height(8.dp))
+
+                                        Text(
+                                            text = "Series: ${ex.sets}  •  Reps: ${ex.reps}  •  Peso: ${ex.weight}kg",
+                                            color = Color(0xFFFFCDD2),
+                                            fontSize = 13.sp
+                                        )
+
+                                        Text(
+                                            text = "Velocidad: ${ex.speed}  •  Duración: ${ex.duration} min",
+                                            color = Color(0xFFFFCDD2),
+                                            fontSize = 13.sp
                                         )
                                     }
                                 }

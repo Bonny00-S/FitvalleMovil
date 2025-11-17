@@ -33,6 +33,9 @@ fun SelectExercisesScreen(navController: NavController) {
     var loading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
 
+    // Recuperar nombre de plantilla desde el backstack previo
+    val templateName = navController.previousBackStackEntry?.savedStateHandle?.get<String>("templateName") ?: ""
+
     // Mapas para músculos y tipos
     var muscleMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var typeMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -105,8 +108,13 @@ fun SelectExercisesScreen(navController: NavController) {
                                 ?.savedStateHandle
                                 ?.set("selectedExercises", selectedExerciseNames)
 
-                            // ✅ Navegamos hacia la pantalla de configuración
-                            navController.navigate("exerciseSetup")
+                            // ✅ Navegamos hacia la pantalla de personalización con el nombre de plantilla
+                            if (templateName.isNotBlank()) {
+                                val encodedName = java.net.URLEncoder.encode(templateName, "UTF-8")
+                                navController.navigate("personalizeTemplateExercises/$encodedName")
+                            } else {
+                                navController.navigate("personalizeTemplateExercises/Mi%20plantilla")
+                            }
                         } else {
                             // Si no seleccionaron nada, mostrar advertencia (opcional)
                             println("⚠️ No se seleccionaron ejercicios")

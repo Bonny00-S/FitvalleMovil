@@ -15,9 +15,9 @@ class TemplateDao {
     private val auth = FirebaseAuth.getInstance()
 
     /**
-     * 🔹 Guarda una nueva plantilla en Realtime Database
+     * 🔹 Guarda una nueva plantilla en Realtime Database con ejercicios personalizados
      */
-    suspend fun saveTemplate(name: String, exercises: List<String>): Boolean {
+    suspend fun saveTemplate(name: String, exercises: List<TemplateExercise>): Boolean {
         val userId = auth.currentUser?.uid ?: return false
         val id = db.push().key ?: return false
         val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())

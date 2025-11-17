@@ -14,6 +14,8 @@ fun NavigationController(navController: NavHostController) {
 
     // 🧠 ViewModel compartido entre los formularios
     val formViewModel: UserFormViewModel = viewModel()
+    // ViewModel compartido para edición de ejercicios en sesión
+    val editSessionViewModel: EditSessionViewModel = viewModel()
 
     NavHost(
         navController = navController,
@@ -118,7 +120,7 @@ fun NavigationController(navController: NavHostController) {
         ) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
             val routineId = backStackEntry.arguments?.getString("routineId") ?: ""
-            ActiveSessionScreen(navController = navController, sessionId = sessionId, routineId = routineId)
+            ActiveSessionScreen(navController = navController, sessionId = sessionId, routineId = routineId, editViewModel = editSessionViewModel)
         }
 
         // ✳️ EDITAR AVATAR
@@ -149,13 +151,16 @@ fun NavigationController(navController: NavHostController) {
 
         //  EJERCIOS DE ENTRENAMIENTO DE MI COACH DETALLADO
         composable("exerciseSessionDetail") {
-            val exercise = navController.previousBackStackEntry
-                ?.savedStateHandle
-                ?.get<SessionExercise>("exerciseDetail")
+            ExerciseSessionDetailScreen(navController, editSessionViewModel)
+        }
 
-            if (exercise != null) {
-                ExerciseSessionDetailScreen(navController, exercise)
-            }
+        // 🧩 PERSONALIZAR EJERCICIOS DE PLANTILLA
+        composable(
+            route = "personalizeTemplateExercises/{templateName}",
+            arguments = listOf(navArgument("templateName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val templateName = backStackEntry.arguments?.getString("templateName") ?: "Mi plantilla"
+            PersonalizeTemplateExercisesScreen(navController = navController, templateName = templateName)
         }
 
     }

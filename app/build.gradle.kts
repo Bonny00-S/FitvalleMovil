@@ -51,6 +51,8 @@ dependencies {
 
     // Firebase Database
     implementation("com.google.firebase:firebase-database-ktx")
+    // Firebase Storage (para subir avatares compartidos)
+    implementation("com.google.firebase:firebase-storage-ktx")
 
     // --- Tus demás dependencias ---
     implementation(libs.androidx.core.ktx)

@@ -65,7 +65,13 @@ fun MainClientNavScreen(rootNavController: NavHostController) {
 
             // 📜 HISTORIAL
             composable("historial") {
-                HistoryScreen(rootNavController)
+                HistoryScreen(navController)
+            }
+
+            // 📋 DETALLE DE SESIÓN COMPLETADA
+            composable("completedSessionDetail/{sessionId}") { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
+                CompletedSessionDetailScreen(navController, sessionId)
             }
 
             // 🏋️ ENTRENAMIENTO

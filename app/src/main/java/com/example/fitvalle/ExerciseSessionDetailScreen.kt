@@ -1,5 +1,6 @@
 package com.example.fitvalle
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
+import com.example.fitvalle.SessionDao
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.tasks.await
@@ -37,9 +40,13 @@ import androidx.media3.common.util.UnstableApi
 @Composable
 fun ExerciseSessionDetailScreen(
     navController: NavController,
-    exercise: SessionExercise
+    editViewModel: EditSessionViewModel
 ) {
     val gradient = Brush.verticalGradient(listOf(Color(0xFF0D1525), Color(0xFF182235)))
+
+    // 🔹 Recuperar ejercicio desde savedStateHandle
+    val exercise = navController.previousBackStackEntry?.savedStateHandle?.get<SessionExercise>("exerciseDetail")
+        ?: return  // Si no hay ejercicio, retornar
 
     // BASE
     var baseExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -50,15 +57,30 @@ fun ExerciseSessionDetailScreen(
 
     var loading by remember { mutableStateOf(true) }
 
-    // EDITABLES TEMPORALES
-    var sets by remember { mutableStateOf(exercise.sets.toString()) }
-    var reps by remember { mutableStateOf(exercise.reps.toString()) }
-    var weight by remember { mutableStateOf(exercise.weight.toString()) }
-    var speed by remember { mutableStateOf(exercise.speed.toString()) }
-    var duration by remember { mutableStateOf(exercise.duration.toString()) }
+    // 🔹 Verificar si hay valores editados en el ViewModel
+    val editedExercise = editViewModel.getEditedExercise(exercise.exerciseId)
+    
+    Log.d("ExerciseDetail", "🔍 Abriendo ejercicio: ${exercise.exerciseName}")
+    Log.d("ExerciseDetail", "  exerciseId=${exercise.exerciseId}")
+    Log.d("ExerciseDetail", "  Valores originales: Sets=${exercise.sets}, Reps=${exercise.reps}, Weight=${exercise.weight}")
+    if (editedExercise != null) {
+        Log.d("ExerciseDetail", "  ✅ Valores editados encontrados: Sets=${editedExercise.sets}, Reps=${editedExercise.reps}, Weight=${editedExercise.weight}")
+    } else {
+        Log.d("ExerciseDetail", "  ℹ️ No hay valores editados")
+    }
+    
+    // EDITABLES TEMPORALES - Usar valores del ViewModel si existen, sino del ejercicio actual
+    var sets by remember { mutableStateOf((editedExercise?.sets ?: exercise.sets).toString()) }
+    var reps by remember { mutableStateOf((editedExercise?.reps ?: exercise.reps).toString()) }
+    var weight by remember { mutableStateOf((editedExercise?.weight ?: exercise.weight).toString()) }
+    var speed by remember { mutableStateOf((editedExercise?.speed ?: exercise.speed).toString()) }
+    var duration by remember { mutableStateOf((editedExercise?.duration ?: exercise.duration).toString()) }
 
     val db = FirebaseDatabase.getInstance("https://fitvalle-fced7-default-rtdb.firebaseio.com/")
         .reference
+
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // ==========================
     // HELPERS
@@ -103,8 +125,21 @@ fun ExerciseSessionDetailScreen(
             loading = false
         }
     }
+    
+    // 🔹 Sincronizar estados si el ViewModel tiene valores más nuevos
+    LaunchedEffect(editedExercise) {
+        if (editedExercise != null) {
+            sets = editedExercise.sets.toString()
+            reps = editedExercise.reps.toString()
+            weight = editedExercise.weight.toString()
+            speed = editedExercise.speed.toString()
+            duration = editedExercise.duration.toString()
+            Log.d("ExerciseDetail", "🔄 Estados sincronizados desde ViewModel")
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Detalles del ejercicio", color = Color.White) },
@@ -246,30 +281,13 @@ fun ExerciseSessionDetailScreen(
             Spacer(Modifier.height(20.dp))
 
             // ==========================
-            // GUARDAR CAMBIOS
+            // EDICIÓN DESHABILITADA
             // ==========================
 
-            Button(
-                onClick = {
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set(
-                            "exerciseEdited",
-                            exercise.copy(
-                                sets = sets.toIntOrNull() ?: exercise.sets,
-                                reps = reps.toIntOrNull() ?: exercise.reps,
-                                weight = weight.toIntOrNull() ?: exercise.weight,
-                                speed = speed.toIntOrNull() ?: exercise.speed,
-                                duration = duration.toIntOrNull() ?: exercise.duration
-                            )
-                        )
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB1163A))
-            ) {
-                Text("Guardar cambios", color = Color.White)
-            }
+            Text(
+                "La funcionalidad de guardar cambios fue deshabilitada.",
+                color = Color(0xFFFFCDD2)
+            )
         }
     }
 }

@@ -11,14 +11,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +29,7 @@ fun ActiveSessionScreen(
     sessionId: String,
     navController: NavController,
     routineId: String,
+    editViewModel: EditSessionViewModel,
     onFinish: () -> Unit = {
         navController.navigate("training") {
             popUpTo("training") { inclusive = true }
@@ -37,7 +41,10 @@ fun ActiveSessionScreen(
         colors = listOf(Color(0xFF0D1525), Color(0xFF182235))
     )
 
+    // editViewModel is provided by the NavHost (shared between screens)
+
     var exercises by remember { mutableStateOf<List<SessionExercise>>(emptyList()) }
+    var originalExercises by remember { mutableStateOf<Map<String, SessionExercise>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     var showConfirm by remember { mutableStateOf(false) }
 
@@ -49,10 +56,70 @@ fun ActiveSessionScreen(
         val dao = SessionDao()
         try {
             exercises = dao.getSessionExercises(sessionId)
+            // Guardar snapshot de los valores originales asignados por el coach
+            originalExercises = exercises.associateBy { it.exerciseId }
         } catch (e: Exception) {
             Log.e("ActiveSession", "Error al cargar ejercicios: ${e.message}")
         } finally {
             loading = false
+        }
+    }
+
+    // 🔹 Monitorear cambios en el ViewModel usando StateFlow
+    val editedExercisesState by editViewModel.editedExercises.collectAsStateWithLifecycle()
+    
+    LaunchedEffect(editedExercisesState) {
+        if (editedExercisesState.isNotEmpty()) {
+            Log.d("ActiveSession", "📝 Cambios detectados en ViewModel: ${editedExercisesState.size} ejercicios")
+            Log.d("ActiveSession", "🔎 edited keys=${editedExercisesState.keys}")
+            Log.d("ActiveSession", "🔎 original keys=${originalExercises.keys}")
+            exercises = exercises.map { exercise ->
+                val edited = editedExercisesState[exercise.exerciseId]
+                if (edited != null) {
+                    Log.d("ActiveSession", "✅ Aplicando cambios a: ${exercise.exerciseName}")
+                    Log.d("ActiveSession", "   Antes: Sets=${exercise.sets}, Reps=${exercise.reps}, Weight=${exercise.weight}")
+                    Log.d("ActiveSession", "   Después: Sets=${edited.sets}, Reps=${edited.reps}, Weight=${edited.weight}")
+                    // ✅ Preservar estado de 'completed' del original
+                    edited.copy(completed = exercise.completed)
+                } else {
+                    exercise
+                }
+            }
+            editViewModel.clearEdited()
+        }
+    }
+
+    // 🔹 También comprobar si el detalle escribió directamente en savedStateHandle
+    // Esto cubre casos donde la sincronización por ViewModel no fue recibida a tiempo.
+    val currentEntry = navController.currentBackStackEntry
+    val savedHandle = currentEntry?.savedStateHandle
+
+    DisposableEffect(currentEntry) {
+        val lifecycle = currentEntry?.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                try {
+                    val editedFromDetail = savedHandle?.get<SessionExercise>("editedExercise")
+                    if (editedFromDetail != null) {
+                        Log.d("ActiveSession", "🔁 Aplicando editedExercise desde savedStateHandle: ${editedFromDetail.exerciseName}")
+                        exercises = exercises.map { ex ->
+                            if (ex.exerciseId == editedFromDetail.exerciseId) {
+                                // preservar 'completed' y 'sessionId'
+                                editedFromDetail.copy(completed = ex.completed, sessionId = ex.sessionId)
+                            } else ex
+                        }
+                        // limpiar la entrada para evitar re-aplicaciones
+                        savedHandle.remove<SessionExercise>("editedExercise")
+                    }
+                } catch (e: Exception) {
+                    Log.w("ActiveSession", "No pude leer editedExercise desde savedStateHandle: ${e.message}")
+                }
+            }
+        }
+
+        lifecycle?.addObserver(observer)
+        onDispose {
+            lifecycle?.removeObserver(observer)
         }
     }
 
@@ -64,10 +131,21 @@ fun ActiveSessionScreen(
                 actions = {
                     TextButton(onClick = {
                         scope.launch {
-                            val completedExercises = exercises.filter { it.completed }
-                            if (completedExercises.isEmpty()) {
+                            // Preparar la lista de ejercicios a guardar: incluir los completados
+                            // y también aquellos cuyos parámetros fueron editados respecto al original
+                            val exercisesToSave = exercises.filter { ex ->
+                                val original = originalExercises[ex.exerciseId]
+                                val changed = if (original != null) {
+                                    original.sets != ex.sets || original.reps != ex.reps ||
+                                            original.weight != ex.weight || original.speed != ex.speed ||
+                                            original.duration != ex.duration
+                                } else false
+                                ex.completed || changed
+                            }
+
+                            if (exercisesToSave.isEmpty()) {
                                 snackbarHostState.showSnackbar(
-                                    "Debes completar al menos un ejercicio antes de terminar."
+                                    "Debes completar o editar al menos un ejercicio antes de terminar."
                                 )
                                 return@launch
                             }
@@ -75,11 +153,33 @@ fun ActiveSessionScreen(
                             val dao = SessionDao()
                             val customerId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
 
+                            Log.d("ActiveSession", "📋 Antes de preparar finalExercisesToSave:")
+                            Log.d("ActiveSession", "   editedExercises keys: ${editedExercisesState.keys}")
+                            Log.d("ActiveSession", "   exercisesToSave size: ${exercisesToSave.size}")
+                            
+                            // Prefer edited values from the ViewModel when available
+                            val finalExercisesToSave = exercisesToSave.map { ex ->
+                                val edited = editViewModel.getEditedExercise(ex.exerciseId)
+                                if (edited != null) {
+                                    Log.d("ActiveSession", "💾 Using edited value for save: ${edited.exerciseName} Sets=${edited.sets}, Reps=${edited.reps}, Weight=${edited.weight}, Speed=${edited.speed}, Duration=${edited.duration}")
+                                    // preserve completed flag from current ex
+                                    edited.copy(completed = ex.completed, sessionId = ex.sessionId)
+                                } else {
+                                    Log.d("ActiveSession", "⚠️ NO edited value for ${ex.exerciseName}, using original: Sets=${ex.sets}, Reps=${ex.reps}")
+                                    ex
+                                }
+                            }
+
+                            Log.d("ActiveSession", "✅ finalExercisesToSave preparado con ${finalExercisesToSave.size} ejercicios")
+                            finalExercisesToSave.forEachIndexed { idx, ex ->
+                                Log.d("ActiveSession", "   [$idx] ${ex.exerciseName}: Sets=${ex.sets}, Reps=${ex.reps}, Weight=${ex.weight}, Speed=${ex.speed}, Duration=${ex.duration}")
+                            }
+
                             val success = dao.saveCompletedSession(
                                 customerId = customerId,
                                 routineId = routineId,
                                 sessionId = sessionId,
-                                exercisesDone = completedExercises
+                                exercisesDone = finalExercisesToSave
                             )
 
                             if (success) {
@@ -253,8 +353,8 @@ fun CancelTrainingDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                     }
                     OutlinedButton(
                         onClick = onDismiss,
-                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        modifier = Modifier
                     ) {
                         Text("No", color = Color.White)
                     }
